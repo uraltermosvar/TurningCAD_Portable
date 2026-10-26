@@ -22,7 +22,6 @@ import {
 } from "@/lib/contour/pilot-tools.ts";
 
 const LS_KEY = "icp-contour.v4";
-/** Legacy keys — only migrate history (saved[]), never restore as current doc. */
 const LS_LEGACY_KEYS = ["icp-contour.v1"];
 
 export type TabId = "params" | "gcode" | "math" | "help";
@@ -30,13 +29,11 @@ export type TabId = "params" | "gcode" | "math" | "help";
 interface ContourState {
   doc: ContourDoc;
   selectedId: string | null;
-  /** 0=start, 1=arc vertex (mid), 2=end — for arc/rounding dim points */
   arcPointIdx: number;
   solved: SolvedContour;
   history: ContourDoc[];
   future: ContourDoc[];
   showMirror: boolean;
-  /** 1 = контур сверху (+X), -1 = снизу (−X) */
   contourSide: 1 | -1;
   showGrid: boolean;
   showDims: boolean;
@@ -101,7 +98,6 @@ function persistNow(state: Pick<ContourState, "doc" | "saved" | "showMirror" | "
     localStorage.setItem(
       LS_KEY,
       JSON.stringify({
-        // lastDraft is stored but NOT restored on open — always start blank
         lastDraft: state.doc,
         saved: state.saved,
         showMirror: state.showMirror,
@@ -111,9 +107,7 @@ function persistNow(state: Pick<ContourState, "doc" | "saved" | "showMirror" | "
         contourSide: state.contourSide,
       }),
     );
-  } catch {
-    /* ignore quota */
-  }
+  } catch { /* ignore quota */ }
 }
 
 function readJson(key: string): Record<string, unknown> | null {
@@ -135,7 +129,6 @@ function collectSaved(parsed: Record<string, unknown> | null): SavedEntry[] {
   );
 }
 
-/** Merge saved lists by name+at, newest first, max 12. */
 function mergeSaved(...lists: SavedEntry[][]): SavedEntry[] {
   const map = new Map<string, SavedEntry>();
   for (const list of lists) {
@@ -150,27 +143,20 @@ function mergeSaved(...lists: SavedEntry[][]): SavedEntry[] {
 function makeElement(kind: ElementKind, extra: Record<string, unknown> = {}): ContourElement {
   const id = newId(kind[0] ?? "e");
   switch (kind) {
-    case "start":
-      return { id, kind: "start" }; // XS/ZS empty until user enters
-    case "line":
-      // X/Z intentionally left empty → inherit previous end (solver keeps start.x / start.z)
-      return { id, kind: "line", ...(extra as object) } as ContourElement;
+    case "start": return { id, kind: "start" };
+    case "line": return { id, kind: "line", ...(extra as object) } as ContourElement;
     case "arc":
       return {
-        id,
-        kind: "arc",
+        id, kind: "arc",
         rotation: extra.rotation === "cw" ? "cw" : "ccw",
         centerMode: "none",
         ...(extra as object),
       } as ContourElement;
-    case "chamfer":
-      return { id, kind: "chamfer", ...(extra as object) } as ContourElement;
-    case "rounding":
-      return { id, kind: "rounding", ...(extra as object) } as ContourElement;
+    case "chamfer": return { id, kind: "chamfer", ...(extra as object) } as ContourElement;
+    case "rounding": return { id, kind: "rounding", ...(extra as object) } as ContourElement;
     case "undercut":
       return {
-        id,
-        kind: "undercut",
+        id, kind: "undercut",
         form: (extra.form as "din76" | "din509e" | "din509f") ?? "din76",
         j: 1,
         ...(extra as object),
@@ -178,34 +164,15 @@ function makeElement(kind: ElementKind, extra: Record<string, unknown> = {}): Co
   }
 }
 
-function seedElement(
-  kind: ElementKind,
-  extra: Record<string, unknown>,
-  end: { z: number; x: number },
-  xMode: XMode,
-): ContourElement {
-  // Do not pre-fill X/Z into the form: empty means "inherit previous end".
-  // Solver already starts from start.x / start.z when absolute/incremental are absent.
-  if (kind === "line") {
-    return makeElement("line", { ...extra });
-  }
-  if (kind === "arc") {
-    // No default R/X/Z — fields stay empty
-    return makeElement("arc", { ...extra });
-  }
-  if (kind === "undercut") {
-    // Undercut still needs a rough target; leave X/Z empty so fields stay blank
-    return makeElement("undercut", { ...extra });
-  }
+function seedElement(kind: ElementKind, extra: Record<string, unknown>, end: { z: number; x: number }, xMode: XMode): ContourElement {
+  if (kind === "line") return makeElement("line", { ...extra });
+  if (kind === "arc") return makeElement("arc", { ...extra });
+  if (kind === "undercut") return makeElement("undercut", { ...extra });
   return makeElement(kind, extra);
 }
 
-
-function bakeTransitionsInline(
-  elements: { id: string; kind: string; [k: string]: unknown }[],
-  solvedList: { id: string; segments?: { type: string; start: { z: number; x: number }; end: { z: number; x: number }; center?: { z: number; x: number }; r?: number; cw?: boolean }[] }[],
-): typeof elements | null {
-  const isPrim = (e: { kind: string } | undefined) => !!e && (e.kind === "line" || e.kind === "arc");
+function bakeTransitionsInline(elements: any[], solvedList: any[]): typeof elements | null {
+  const isPrim = (e: any) => !!e && (e.kind === "line" || e.kind === "arc");
   const rnd3 = (v: number) => Math.round(v * 1000) / 1000;
   const fromR = (x: number) => rnd3(x * 2);
   let changed = false;
@@ -244,7 +211,6 @@ function bakeTransitionsInline(
   }
   return changed ? next : null;
 }
-
 
 export const useContourStore = create<ContourState>((set, get) => ({
   doc: INITIAL_DOC,
@@ -314,11 +280,10 @@ export const useContourStore = create<ContourState>((set, get) => ({
     get().addElement(el, get().selectedId);
   },
   deleteSelected: () => {
-    // BAKE_BEFORE_DELETE
     try {
-      const sol = get().solved as { elements?: unknown; solved?: unknown };
+      const sol = get().solved as any;
       const list = sol?.elements ?? sol?.solved ?? [];
-      const baked = bakeTransitionsInline(get().doc.elements as never, (Array.isArray(list) ? list : []) as never);
+      const baked = bakeTransitionsInline(get().doc.elements, Array.isArray(list) ? list : []);
       if (baked) set({ doc: { ...get().doc, elements: baked } });
     } catch { /* */ }
 
@@ -328,7 +293,6 @@ export const useContourStore = create<ContourState>((set, get) => ({
     const idx = els.findIndex((e) => e.id === id);
     const el = idx >= 0 ? els[idx] : undefined;
     if (!el || el.kind === "start") return;
-    // Select previous element (or start if deleting the first after start)
     const prevId = idx > 0 ? els[idx - 1]!.id : els[0]?.id ?? null;
     get().patchDoc((d) => ({ ...d, elements: d.elements.filter((e) => e.id !== id) }));
     set({ selectedId: prevId });
@@ -380,113 +344,81 @@ export const useContourStore = create<ContourState>((set, get) => ({
     const elements: ContourElement[] = [{ id: newId("s"), kind: "start", xs: startX, zs: solved.end.z }];
     for (const seg of segs) {
       if (seg.type === "line") {
-        elements.push({
-          id: newId("l"),
-          kind: "line",
-          x: fromRadius(seg.start.x, doc.xMode),
-          z: seg.start.z,
-        });
+        elements.push({ id: newId("l"), kind: "line", x: fromRadius(seg.start.x, doc.xMode), z: seg.start.z });
       } else {
-        elements.push({
-          id: newId("a"),
-          kind: "arc",
-          rotation: seg.cw ? "ccw" : "cw",
-          x: fromRadius(seg.start.x, doc.xMode),
-          z: seg.start.z,
-          r: seg.r,
-          centerMode: "none",
-        });
+        elements.push({ id: newId("a"), kind: "arc", rotation: seg.cw ? "ccw" : "cw", x: fromRadius(seg.start.x, doc.xMode), z: seg.start.z, r: seg.r, centerMode: "none" });
       }
     }
     get().patchDoc((d) => ({ ...d, elements }));
     get().reanalyze();
   },
+
   /**
-   * Перенос заготовки (+контура) по Z. Работает и без контура (сдвиг на length).
+   * Перенос заготовки и контура по Z. (Версия из HTML)
    */
   flipZ: () => {
-    const state = get();
-    const { doc, solved } = state;
+    const { doc } = get();
     const rnd = (v: number) => Math.round(v * 1000) / 1000;
     const shiftVal = (v: number | null | undefined, delta: number) =>
       v != null && Number.isFinite(+v) ? rnd(+v + delta) : v;
-    let zMin: number | null = null;
-    let zMax: number | null = null;
-    const consider = (z: number | null | undefined) => {
-      if (z == null || !Number.isFinite(+z)) return;
-      const v = +z;
-      if (zMin == null || v < zMin) zMin = v;
-      if (zMax == null || v > zMax) zMax = v;
-    };
-    try {
-      const s = solved as {
-        start?: { z?: number };
-        segments?: { start?: { z?: number }; end?: { z?: number }; type?: string; center?: { z?: number } }[];
-        elements?: { start?: { z?: number }; end?: { z?: number }; segments?: { start?: { z?: number }; end?: { z?: number }; center?: { z?: number } }[] }[];
-      } | null;
-      if (s?.start) consider(s.start.z);
-      for (const seg of s?.segments ?? []) {
-        consider(seg.start?.z); consider(seg.end?.z);
-        if (seg.type === "arc" && seg.center) consider(seg.center.z);
-      }
-      for (const el of s?.elements ?? []) {
-        consider(el.start?.z); consider(el.end?.z);
-        for (const seg of el.segments ?? []) {
-          consider(seg.start?.z); consider(seg.end?.z);
-          if (seg.center) consider(seg.center.z);
-        }
-      }
-      for (const el of doc.elements ?? []) {
-        if (el.kind === "start") consider((el as { zs?: number }).zs);
-        if ("z" in el) consider((el as { z?: number | null }).z);
-        if ("k" in el) consider((el as { k?: number | null }).k);
-      }
-    } catch { /* */ }
-    const docStock = (doc as { stock?: Record<string, unknown> }).stock;
-    const rootStock = (state as { stock?: Record<string, unknown> }).stock;
-    const stockSrc = (docStock ?? rootStock ?? {}) as Record<string, unknown>;
-    const length = Number(stockSrc.length ?? 60) || 60;
-    const zFace0 = Number(stockSrc.zFace ?? stockSrc.z ?? stockSrc.faceZ ?? 0);
-    if (Number.isFinite(zFace0)) { consider(zFace0); consider(zFace0 - length); }
-    let delta: number;
-    if (zMin != null && zMax != null && Math.abs(zMax - zMin) > 1e-9) {
+
+    const stock = (doc as any).stock || {};
+    const zFace0 = Number(stock.zFace ?? 0);
+    const len = Number(stock.length ?? 60) || 60;
+    
+    const zChuck0 = zFace0 - len;
+    const zMin = Math.min(zFace0, zChuck0);
+    const zMax = Math.max(zFace0, zChuck0);
+    
+    let delta = 0;
+    if (zMax - zMin < 1e-9) {
+      // Если длина 0, просто перекидываем по знаку
+      delta = zFace0 >= 0 ? -len : len;
+    } else {
       const mid = (zMin + zMax) / 2;
+      // Справа от Z0 → правый край на Z0; слева → левый край на Z0
       delta = mid >= -1e-9 ? -zMax : -zMin;
       if (Math.abs(delta) < 1e-9) delta = mid >= -1e-9 ? -(zMax - zMin) : (zMax - zMin);
-    } else {
-      delta = zFace0 >= -1e-9 ? -length : length;
     }
+
+    // Сдвигаем элементы контура
     const elements = (doc.elements ?? []).map((el) => {
-      if (el.kind === "start") return { ...el, zs: shiftVal((el as { zs?: number }).zs, delta) as number };
-      if (el.kind === "line") return { ...el, z: shiftVal((el as { z?: number | null }).z, delta) as number | null };
-      if (el.kind === "arc") return { ...el, z: shiftVal((el as { z?: number | null }).z, delta) as number | null, k: shiftVal((el as { k?: number | null }).k, delta) as number | null };
+      if (el.kind === "start") return { ...el, zs: shiftVal((el as any).zs, delta) };
+      if (el.kind === "line") return { ...el, z: shiftVal((el as any).z, delta) };
+      if (el.kind === "arc") return { ...el, z: shiftVal((el as any).z, delta), k: shiftVal((el as any).k, delta) };
       return el;
     });
-    const stockKeys = ["zFace", "z", "z0", "faceZ", "chuckZ", "zChuck"] as const;
-    const stockPatch: Record<string, number> = {};
-    for (const key of stockKeys) {
-      const raw = stockSrc[key];
-      if (raw != null && Number.isFinite(+raw)) stockPatch[key] = shiftVal(+raw, delta) as number;
-    }
-    if (!("zFace" in stockPatch) && Number.isFinite(zFace0)) stockPatch.zFace = rnd(zFace0 + delta);
-    if (typeof get().patchDoc === "function") {
-      get().patchDoc((d) => {
-        const next = { ...d, elements } as typeof d & { stock?: Record<string, unknown> };
-        if (Object.keys(stockPatch).length) {
-          next.stock = { ...((d as { stock?: Record<string, unknown> }).stock ?? { diameter: 40, length, visible: true }), ...stockPatch };
-        }
-        return next;
-      });
-    }
-    if (Object.keys(stockPatch).length && rootStock && !docStock) {
-      try { set({ stock: { ...rootStock, ...stockPatch } } as Partial<typeof state>); } catch { /* */ }
-    }
+
+    // Сдвигаем заготовку
+    const nextStock = { ...stock, zFace: rnd(zFace0 + delta) };
+    const nextDoc = { ...doc, elements, stock: nextStock } as ContourDoc;
+    const nextSolved = resolveDoc(nextDoc);
+    
+    set({ 
+      doc: nextDoc, 
+      solved: nextSolved, 
+      history: [...get().history.slice(-48), doc],
+      future: []
+    });
+    persistNow({ ...get(), doc: nextDoc });
   },
-
-  /**
-   * Перенос заготовки (+контура) по Z. Работает и без контура (сдвиг на length).
-   */
-
+  
+  mirrorZ: () => {
+    get().patchDoc((d) => mirrorDocZ(d));
+  },
+  applyTemplate: (id) => {
+    get().patchDoc((d) => applyTemplate(d, id));
+  },
+  setPostProfile: (postProfile) => set({ postProfile }),
+  setProgramNo: (programNo) => set({ programNo }),
+  setWcs: (wcs) => set({ wcs }),
+  setFeed: (feed) => set({ feed }),
+  setSpindle: (spindle) => set({ spindle }),
+  setTool: (tool) => set({ tool }),
+  reanalyze: () => {
+    const s = get().solved;
+    set({ analysis: analyzeContour(s) });
+  },
   saveNamed: () => {
     const { doc, saved } = get();
     const next = [
@@ -511,7 +443,6 @@ export const useContourStore = create<ContourState>((set, get) => ({
       const legacyLists = LS_LEGACY_KEYS.map((k) => collectSaved(readJson(k)));
       let saved = mergeSaved(collectSaved(cur), ...legacyLists);
 
-      // One-time: if legacy had a non-trivial last doc not already in history, keep it
       for (const key of LS_LEGACY_KEYS) {
         const leg = readJson(key);
         if (!leg) continue;
@@ -536,7 +467,6 @@ export const useContourStore = create<ContourState>((set, get) => ({
         history: [],
         future: [],
       });
-      // Write v4 key immediately so next open is clean
       persistNow({ ...get(), doc: blank, saved });
     } catch {
       const blank = emptyDoc("Контур");
@@ -550,7 +480,7 @@ export const useContourStore = create<ContourState>((set, get) => ({
   },
   persist: () => persistNow(get()),
   stepAnchor: (dir) => {
-    const { doc, selectedId, arcPointIdx, solved } = get();
+    const { selectedId, arcPointIdx, solved } = get();
     type Nav = { elId: string; subIdx: number };
     const list: Nav[] = [];
     const seen = new Set<string>();

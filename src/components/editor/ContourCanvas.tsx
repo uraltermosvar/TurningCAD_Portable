@@ -10,22 +10,13 @@ const PHOS_HOT = "#ffe566";
 const STEEL = "#c4b49a";
 const STOCK = "#5a4a3a";
 const CHUCK = "#c9a86c";
-/** Element stroke colours (match HTML portable contour) */
 const COL_LINE = "#ffd000";
-const COL_CHAMFER = "#00dfff"; // фаска — голубой
-const COL_ARC = "#ff7dff"; // радиусы / дуги — розовый
-const COL_DIM = "#e87070"; // размерные точки — мягкий красный
+const COL_CHAMFER = "#00dfff";
+const COL_ARC = "#ff7dff";
+const COL_DIM = "#e87070";
 const COL_DIM_ACT = "#ffe566";
 
-/** Midpoint (vertex) of an arc segment along its sweep — third dim point. */
-function arcVertexOf(seg: {
-  type: string;
-  start: { z: number; x: number };
-  end: { z: number; x: number };
-  center?: { z: number; x: number };
-  r?: number;
-  sweep?: number;
-}): { z: number; x: number } | null {
+function arcVertexOf(seg: any): { z: number; x: number } | null {
   if (seg.type !== "arc" || !seg.center || !(seg.r && seg.r > 0)) return null;
   const a0 = Math.atan2(seg.start.x - seg.center.x, seg.start.z - seg.center.z);
   const am = a0 + (seg.sweep || 0) * 0.5;
@@ -105,24 +96,19 @@ export function ContourCanvas() {
       zMax += padW;
       xMax += padH;
       xMin = showMirror ? -xMax : Math.min(0, xMin) - padH;
-      // When contour is below (side=-1), include negative X in fit box
       if ((contourSide || 1) < 0 && !showMirror) {
         xMin = Math.min(xMin, -xMax);
       }
       const worldW = Math.max(6, zMax - zMin);
       const worldH = Math.max(6, xMax - xMin);
       let scale = Math.min((w - pad * 2) / worldW, (h - pad * 2) / worldH);
-      // умный старт: мало сегментов — крупнее (контроль ввода)
       const nSeg = solved.segments?.length ?? 0;
       if (nSeg <= 2) scale = Math.min(scale * 1.35, (h - pad * 2) / Math.max(worldH * 0.55, 8));
       else if (nSeg <= 6) scale = Math.min(scale * 1.1, 120);
       view.current.scale = Math.max(0.4, Math.min(200, scale));
       view.current.ox = pad - zMin * view.current.scale + (w - pad * 2 - worldW * view.current.scale) / 2;
-      // y = oy - x * side * scale  →  centre world X at mid-screen
       const sideFit = contourSide || 1;
       const xMid = (xMin + xMax) / 2;
-      // slight vertical bias: leave extra margin on the outer (+X) side
-      // so callouts / labels stay inside when contour is at bottom
       const bias = sideFit < 0 ? -h * 0.04 : h * 0.04;
       view.current.oy = h / 2 + bias + xMid * sideFit * view.current.scale;
     };
@@ -130,7 +116,6 @@ export function ContourCanvas() {
     const side = contourSide || 1;
     const toS = (z: number, x: number) => ({
       x: view.current.ox + z * view.current.scale,
-      // side: 1 = контур сверху (+X вверх), −1 = снизу (контур под осью Z)
       y: view.current.oy - x * side * view.current.scale,
     });
 
@@ -162,6 +147,7 @@ export function ContourCanvas() {
         solved.bbox.xMax.toFixed(3),
         doc.stock.diameter,
         doc.stock.length,
+        doc.stock.zFace,
         showStock ? 1 : 0,
         showMirror ? 1 : 0,
         contourSide || 1,
@@ -219,12 +205,10 @@ export function ContourCanvas() {
       ctx.font = "11px 'IBM Plex Sans', sans-serif";
       ctx.textAlign = "left";
       ctx.fillText("+Z", Math.max(8, w - 28), o.y - 6);
-      // +X shows turret / positive-radius side: top when side>0, bottom when side<0
       ctx.fillStyle = X_COL;
       ctx.textAlign = "left";
       if (side > 0) {
         ctx.fillText("+X", o.x + 6, 16);
-        // small arrow toward +X (up)
         ctx.beginPath();
         ctx.moveTo(o.x, 22);
         ctx.lineTo(o.x - 4, 30);
@@ -233,7 +217,6 @@ export function ContourCanvas() {
         ctx.fill();
       } else {
         ctx.fillText("+X", o.x + 6, h - 10);
-        // small arrow toward +X (down)
         ctx.beginPath();
         ctx.moveTo(o.x, h - 22);
         ctx.lineTo(o.x - 4, h - 30);
@@ -256,7 +239,6 @@ export function ContourCanvas() {
         ctx.strokeRect(a.x, a.y, b.x - a.x, b.y - a.y);
         ctx.setLineDash([]);
 
-        // Chuck jaws clamped to stock diameter
         const jawW = Math.max(14, 12 * scale);
         const jawReach = stockR * 0.5;
         const jawOuter = stockR + Math.max(3, 4 / Math.max(scale, 0.01));
@@ -319,8 +301,7 @@ export function ContourCanvas() {
         ctx.fill();
       }
 
-      /** Косая линия (есть ΔZ и ΔX) — как фаска, голубая */
-      const isSlantedLine = (seg: { type: string; start: { z: number; x: number }; end: { z: number; x: number } }) => {
+      const isSlantedLine = (seg: any) => {
         if (seg.type !== "line") return false;
         const dz = Math.abs(seg.end.z - seg.start.z);
         const dx = Math.abs(seg.end.x - seg.start.x);
@@ -328,9 +309,7 @@ export function ContourCanvas() {
       };
 
       const colorForKind = (kind: string, active: boolean, slanted = false): string => {
-        if (kind === "chamfer" || slanted) {
-          return active ? "#7aefff" : COL_CHAMFER;
-        }
+        if (kind === "chamfer" || slanted) return active ? "#7aefff" : COL_CHAMFER;
         if (active) {
           if (kind === "arc" || kind === "rounding") return "#ffb0ff";
           return PHOS_HOT;
@@ -340,19 +319,7 @@ export function ContourCanvas() {
         return PHOS;
       };
 
-      const strokeSeg = (
-        seg: {
-          type: string;
-          start: { z: number; x: number };
-          end: { z: number; x: number };
-          center?: { z: number; x: number };
-          r?: number;
-          sweep?: number;
-        },
-        color: string,
-        width: number,
-        sign: 1 | -1,
-      ) => {
+      const strokeSeg = (seg: any, color: string, width: number, sign: 1 | -1) => {
         ctx.strokeStyle = color;
         ctx.lineWidth = width;
         ctx.lineJoin = "round";
@@ -387,7 +354,6 @@ export function ContourCanvas() {
         ctx.stroke();
       };
 
-      // Per-element: фаска/косая — голубые, дуги/R — розовые, ось-aligned линии — жёлтые
       for (const el of solved.elements) {
         if (el.kind === "start" || !el.segments?.length) continue;
         const isAct = el.id === selectedId;
@@ -410,12 +376,7 @@ export function ContourCanvas() {
       if (selectedId) {
         const sel = solved.elements.find((e) => e.id === selectedId);
         if (sel) {
-          // Selected path already drawn brighter above; keep block for dim points
-
-          // Dim points: for arc/rounding — start, vertex (mid), end (3 pts); else end (or start)
-          const isArcLike =
-            (sel.kind === "arc" || sel.kind === "rounding") &&
-            sel.segments[0]?.type === "arc";
+          const isArcLike = (sel.kind === "arc" || sel.kind === "rounding") && sel.segments[0]?.type === "arc";
           let active = { z: sel.end.z, x: sel.end.x };
           if (sel.kind === "start") {
             active = { z: sel.start.z, x: sel.start.x };
@@ -427,7 +388,6 @@ export function ContourCanvas() {
             active = pts3[idx] || seg0.end;
           }
 
-          // All three dim dots for arc/rounding (and endpoints for others)
           const DOT_R = 2.8;
           const drawDot = (pt: { z: number; x: number }, isAct: boolean) => {
             const p = toS(pt.z, pt.x);
@@ -472,58 +432,8 @@ export function ContourCanvas() {
           ctx.stroke();
           ctx.restore();
 
-          // Выноска: одна строка, полка слева; для середины дуги — те же G2/G3 X Z R I K
-          
-      // Direction arrows (pilot): mid-segment tangent ticks
-      if (showArrows) {
-        for (const seg of solved.segments) {
-          let mz: number, mx: number, tz: number, tx: number;
-          if (seg.type === "line") {
-            mz = (seg.start.z + seg.end.z) / 2;
-            mx = (seg.start.x + seg.end.x) / 2;
-            tz = seg.end.z - seg.start.z;
-            tx = seg.end.x - seg.start.x;
-          } else {
-            const a0 = Math.atan2(seg.start.x - seg.center.x, seg.start.z - seg.center.z);
-            const amid = a0 + seg.sweep * 0.5;
-            mz = seg.center.z + seg.r * Math.cos(amid);
-            mx = seg.center.x + seg.r * Math.sin(amid);
-            // tangent
-            tz = seg.cw ? Math.sin(amid) : -Math.sin(amid);
-            tx = seg.cw ? -Math.cos(amid) : Math.cos(amid);
-          }
-          const L = Math.hypot(tz, tx) || 1;
-          tz /= L;
-          tx /= L;
-          const p = toS(mz, mx);
-          const sc = view.current.scale;
-          const ah = 7;
-          // screen direction: dz -> +x screen, dx -> -y screen (with side)
-          const sideA = contourSide || 1;
-          const sx = tz * sc;
-          const sy = -tx * sideA * sc;
-          const sL = Math.hypot(sx, sy) || 1;
-          const ux = sx / sL;
-          const uy = sy / sL;
-          const tipX = p.x + ux * 10;
-          const tipY = p.y + uy * 10;
-          ctx.strokeStyle = "rgba(120, 220, 180, 0.85)";
-          ctx.fillStyle = "rgba(120, 220, 180, 0.85)";
-          ctx.lineWidth = 1.4;
-          ctx.beginPath();
-          ctx.moveTo(p.x - ux * 6, p.y - uy * 6);
-          ctx.lineTo(tipX, tipY);
-          ctx.stroke();
-          ctx.beginPath();
-          ctx.moveTo(tipX, tipY);
-          ctx.lineTo(tipX - ux * ah + uy * 4, tipY - uy * ah - ux * 4);
-          ctx.lineTo(tipX - ux * ah - uy * 4, tipY - uy * ah + ux * 4);
-          ctx.closePath();
-          ctx.fill();
-        }
-      }
-
-if (showDims) {
+          // Выноска
+          if (showDims) {
             const X = fromRadius(active.x, doc.xMode).toFixed(3);
             const Z = active.z.toFixed(3);
             let oneLine = "";
@@ -569,10 +479,57 @@ if (showDims) {
               side,
             });
           }
+
+          // Direction arrows (pilot)
+          if (showArrows) {
+            for (const seg of solved.segments) {
+              let mz: number, mx: number, tz: number, tx: number;
+              if (seg.type === "line") {
+                mz = (seg.start.z + seg.end.z) / 2;
+                mx = (seg.start.x + seg.end.x) / 2;
+                tz = seg.end.z - seg.start.z;
+                tx = seg.end.x - seg.start.x;
+              } else {
+                const a0 = Math.atan2(seg.start.x - seg.center.x, seg.start.z - seg.center.z);
+                const amid = a0 + seg.sweep * 0.5;
+                mz = seg.center.z + seg.r * Math.cos(amid);
+                mx = seg.center.x + seg.r * Math.sin(amid);
+                tz = seg.cw ? Math.sin(amid) : -Math.sin(amid);
+                tx = seg.cw ? -Math.cos(amid) : Math.cos(amid);
+              }
+              const L = Math.hypot(tz, tx) || 1;
+              tz /= L;
+              tx /= L;
+              const p = toS(mz, mx);
+              const sc = view.current.scale;
+              const ah = 7;
+              const sideA = contourSide || 1;
+              const sx = tz * sc;
+              const sy = -tx * sideA * sc;
+              const sL = Math.hypot(sx, sy) || 1;
+              const ux = sx / sL;
+              const uy = sy / sL;
+              const tipX = p.x + ux * 10;
+              const tipY = p.y + uy * 10;
+              ctx.strokeStyle = "rgba(120, 220, 180, 0.85)";
+              ctx.fillStyle = "rgba(120, 220, 180, 0.85)";
+              ctx.lineWidth = 1.4;
+              ctx.beginPath();
+              ctx.moveTo(p.x - ux * 6, p.y - uy * 6);
+              ctx.lineTo(tipX, tipY);
+              ctx.stroke();
+              ctx.beginPath();
+              ctx.moveTo(tipX, tipY);
+              ctx.lineTo(tipX - ux * ah + uy * 4, tipY - uy * ah - ux * 4);
+              ctx.lineTo(tipX - ux * ah - uy * 4, tipY - uy * ah + ux * 4);
+              ctx.closePath();
+              ctx.fill();
+            }
+          }
         }
       }
 
-      // Dim dots on non-selected arc/rounding (start / vertex / end) — soft red
+      // Dim dots on non-selected elements
       {
         const drawn = new Set<string>();
         const mark = (pt: { z: number; x: number }) => {
@@ -600,8 +557,7 @@ if (showDims) {
         }
       }
 
-// Start point: always visible as a small marker (even when selected —
-      // the pulse sits on top of it)
+      // Start point
       {
         const pS = toS(solved.start.z, solved.start.x);
         const startSelected = solved.elements[0]?.id === selectedId;
@@ -613,7 +569,6 @@ if (showDims) {
         ctx.arc(pS.x, pS.y, 4.5, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
-        // inner core for readability
         ctx.fillStyle = startSelected ? "#1a120c" : "rgba(26,18,12,0.85)";
         ctx.beginPath();
         ctx.arc(pS.x, pS.y, 1.6, 0, Math.PI * 2);
@@ -766,12 +721,7 @@ if (showDims) {
   );
 }
 
-
-/** Drawing-style dimension leader — HTML portable behaviour:
- *  Shelf to the left; Y = outer side of stock/start ± 10 mm.
- *  When side < 0 the shelf is mirrored below the contour, but text always
- *  sits ABOVE the shelf (upright) so it never falls off the bottom edge.
- */
+/** Drawing-style dimension leader */
 function drawDimCallout(
   ctx: CanvasRenderingContext2D,
   px: number,
@@ -798,17 +748,11 @@ function drawDimCallout(
   const textBlockH = lines.length * lineH + 6;
   const mm10 = 10 * (opts.scale || 1);
   const side = opts.side || 1;
-  // outer edge of stock/start (toS already applies side)
   const topY = opts.toS(0, opts.refX).y;
-  // side>0: shelf further above contour; side<0: further below (mirrored)
+  
   let kinkY = side > 0 ? topY - mm10 : topY + mm10;
-  // Keep shelf + text (always drawn above the shelf) inside the canvas
   if (kinkY < textBlockH + 10) kinkY = textBlockH + 10;
   if (kinkY > canvasH - 12) kinkY = canvasH - 12;
-
-  // If the active point is near the bottom and shelf would sit on top of it
-  // awkwardly, still prefer a visible shelf above the text baseline.
-  // (HTML: text always baseline-bottom on the shelf.)
 
   const dirX = -1;
   const lead = Math.max(36, Math.abs(py - kinkY) * 0.35);
@@ -831,7 +775,6 @@ function drawDimCallout(
   ctx.arc(px, py, 2.2, 0, Math.PI * 2);
   ctx.fill();
 
-  // Text always ABOVE the shelf, upright (never mirrored / never under the shelf)
   ctx.font = font;
   ctx.textAlign = "right";
   ctx.textBaseline = "bottom";

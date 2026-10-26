@@ -134,13 +134,37 @@ function lineDirVec(el: LineElement): Vec | null {
 
 function solveLineKnown(start: Vec, el: LineElement, mode: XMode): LineSolve {
   const formulas: FormulaStep[] = [];
-  let xEnd = start.x;
-  let zEnd = start.z;
-
+  
   const xAbs = toRad(el.x, mode);
   const zAbs = el.z;
   const xInc = toRad(el.xi, mode);
   const zInc = el.zi;
+
+  const hasX = defined(xAbs) || defined(xInc);
+  const hasZ = defined(zAbs) || defined(zInc);
+  const hasA = defined(el.a);
+  const hasL = defined(el.l);
+
+  // --- ПУНКТ 3: Только L (без A, X, Z, dir) ---
+  // Принудительно строим отрезок по оси Z (в +Z или -Z).
+  if (hasL && !hasA && !hasX && !hasZ && !el.dir) {
+    const L = el.l!;
+    const end = { z: start.z + L, x: start.x };
+    formulas.push(formula("Отрезок L", "Только L: горизонтально по Z, X не меняется", `L=${L}`));
+    formulas.push(formula("Конец", "Z = Zs + L", `Z=${end.z.toFixed(3)}`));
+    return {
+      end,
+      angleDeg: L >= 0 ? 0 : 180,
+      length: Math.abs(L),
+      formulas,
+      deferred: false,
+      dir: L >= 0 ? { z: 1, x: 0 } : { z: -1, x: 0 },
+    };
+  }
+  // ------------------------------------------
+
+  let xEnd = start.x;
+  let zEnd = start.z;
 
   if (defined(xAbs)) xEnd = xAbs;
   else if (defined(xInc)) xEnd = start.x + xInc;
@@ -180,22 +204,18 @@ function solveLineKnown(start: Vec, el: LineElement, mode: XMode): LineSolve {
   }
 
   if (defined(el.a) && hasEndZ && !hasEndX && !isHorizontal(el.dir, polarA)) {
-    // A is the slope of the line (not a one-way ray). Negative t is allowed:
-    // travel direction is determined by the given end coordinate.
     dir = dirFromAngle(polarA);
     if (Math.abs(dir.z) < OPEN) throw new Error("Угол 90°: Z не задаёт длину, укажите X");
     const t = (zEnd - start.z) / dir.z;
     xEnd = start.x + t * dir.x;
     length = Math.abs(t);
     const end = { z: zEnd, x: xEnd };
-    // Actual travel direction start→end (may oppose û(A) when t<0)
     const travel = length > OPEN ? norm(sub(end, start)) : dir;
-    formulas.push(formula("Из Z и A", "t = (Z − Zs) / cos A,  Δx = t sin A (A — наклон, t может быть < 0)", `t=${t.toFixed(4)}`));
+    formulas.push(formula("Из Z и A", "t = (Z − Zs) / cos A,  Δx = t sin A", `t=${t.toFixed(4)}`));
     return { end, angleDeg: polarA, length, formulas, deferred: false, dir: travel };
   }
 
   if (defined(el.a) && hasEndX && !hasEndZ && !isVertical(el.dir, polarA)) {
-    // A is slope; t may be negative (e.g. X grows while A points toward −X).
     dir = dirFromAngle(polarA);
     if (Math.abs(dir.x) < OPEN) throw new Error("Угол 0°: X не задаёт длину, укажите Z");
     const t = (xEnd - start.x) / dir.x;
@@ -203,7 +223,7 @@ function solveLineKnown(start: Vec, el: LineElement, mode: XMode): LineSolve {
     length = Math.abs(t);
     const end = { z: zEnd, x: xEnd };
     const travel = length > OPEN ? norm(sub(end, start)) : dir;
-    formulas.push(formula("Из X и A", "t = Δx / sin A,  Δz = t cos A (A — наклон, t может быть < 0)", `t=${t.toFixed(4)}`));
+    formulas.push(formula("Из X и A", "t = Δx / sin A,  Δz = t cos A", `t=${t.toFixed(4)}`));
     return { end, angleDeg: polarA, length, formulas, deferred: false, dir: travel };
   }
 
@@ -281,8 +301,6 @@ function solveLineKnown(start: Vec, el: LineElement, mode: XMode): LineSolve {
     return { end: start, angleDeg: defined(el.a) ? el.a : radToDeg(ang(dir)), length: 0, formulas, deferred: true, dir };
   }
 
-  // X/Z-only mode: missing X keeps previous X, missing Z keeps previous Z.
-  // Both empty → zero-length (end = start) until the user enters a value.
   if (!defined(el.a) && !defined(el.l) && !el.dir) {
     const end = { z: zEnd, x: xEnd };
     length = dist(start, end);
@@ -371,7 +389,6 @@ function axisRoots(c: number, remSq: number): number[] {
   return [c - rem, c + rem];
 }
 
-/** Pick arc candidate: prefer correct major/minor, shorter sweep, end toward −Z. */
 function pickArcCandidate(
   start: Vec,
   candidates: { end: Vec; center: Vec }[],
@@ -385,14 +402,10 @@ function pickArcCandidate(
     const absSw = Math.abs(sweep);
     const isMajor = absSw > Math.PI + 1e-6;
     let score = 0;
-    // Prefer requested major/minor strongly
     if (!!major === isMajor) score += 1000;
     else score -= 500;
-    // Prefer shorter arc
     score -= absSw * 10;
-    // Prefer end in −Z (typical turning)
     if (c.end.z <= start.z + 1e-6) score += 50;
-    // Prefer smaller |ΔZ| among equals (stable pick)
     score -= Math.abs(c.end.z - start.z) * 0.01;
     scored.push({ end: c.end, center: c.center, sweep, r: dist(c.center, start), score });
   }
@@ -402,7 +415,6 @@ function pickArcCandidate(
   return { end: b.end, center: b.center, sweep: b.sweep, r: b.r };
 }
 
-/** Local sweep (same convention as math.arcSweep): CW ≤ 0, CCW ≥ 0. */
 function arcSweepLocal(p1: Vec, p2: Vec, center: Vec, cw: boolean): number {
   const a1 = ang(sub(p1, center));
   const a2 = ang(sub(p2, center));
@@ -415,7 +427,6 @@ function arcSweepLocal(p1: Vec, p2: Vec, center: Vec, cw: boolean): number {
   return sweep;
 }
 
-/** Проекция точки на окружность — стык G2/G3 без разрыва */
 function snapToCircle(center: Vec, r: number, p: Vec): Vec {
   if (!(r > OPEN)) return p;
   const d = sub(p, center);
@@ -463,7 +474,6 @@ function solveArc(start: Vec, el: ArcElement, mode: XMode): SolvedElement {
   const cxOnly: number[] = [];
   const czOnly: number[] = [];
 
-  // Explicit full center
   if ((el.centerMode === "absolute" || (hasI && hasK)) && hasI && hasK) {
     centers.push({ z: el.k!, x: toRadius(el.i!, mode) });
     formulas.push(formula("Центр абс.", "C = (K, I→xs)", undefined));
@@ -472,12 +482,8 @@ function solveArc(start: Vec, el: ArcElement, mode: XMode): SolvedElement {
     centers.push({ z: start.z + el.ki!, x: start.x + el.ii! });
     formulas.push(formula("Центр инкр.", "C = S + (Ki, Ii)", `Ii=${el.ii}, Ki=${el.ki}`));
   }
-  // Partial I/K with R → auto K or I
-  // Ii alone: center X = start.x + Ii (radius) — kept for loaded old docs
   if (hasIi && !hasKi) cxOnly.push(start.x + el.ii!);
   if (hasKi && !hasIi) czOnly.push(start.z + el.ki!);
-  // Absolute I alone (Ø): center xs = I/2. I=0 → center on spindle axis.
-  // Do NOT add Fanuc alternate (cx=start.x): that produced a different Z and confused G03 X… R… I0.
   if (hasI && !hasK && !(hasIi && hasKi)) {
     cxOnly.push(toRadius(el.i!, mode));
   }
@@ -498,7 +504,6 @@ function solveArc(start: Vec, el: ArcElement, mode: XMode): SolvedElement {
     }
   }
 
-  // Sphere on spindle axis (I=0): only R + end X, no Z, no I/K — centers on axis
   if (
     R != null &&
     !hasI &&
@@ -603,7 +608,6 @@ function solveArc(start: Vec, el: ArcElement, mode: XMode): SolvedElement {
   const Kiso = best.center.z - start.z;
   formulas.push(formula("I, K ISO", "I = Cx − xs,  K = Cz − Zs", `I=${Iiso.toFixed(4)}, K=${Kiso.toFixed(4)}`));
 
-  // R от старта; конец на той же окружности
   const r0 = dist(best.center, start) > OPEN ? dist(best.center, start) : best.r;
   const end0 = snapToCircle(best.center, r0, best.end);
   const sw0 = arcSweepLocal(start, end0, best.center, cw);
@@ -666,27 +670,23 @@ function applyTransition(
   const first = next.segments[0];
   if (!last || !first) return { error: "Нет смежных сегментов для перехода" };
 
-  // Support line–line, line–arc, arc–line, arc–arc via tangent-based corner.
   const corner = last.end;
-  // Sanity: segments should meet at the corner
   if (dist(last.end, first.start) > 0.05) {
     return { error: "Смежные элементы не сходятся в одной точке" };
   }
 
-  const u1 = tangentAtEnd(last);   // incoming travel direction
-  const u2 = tangentAtStart(first); // outgoing travel direction
+  const u1 = tangentAtEnd(last);   
+  const u2 = tangentAtStart(first); 
   if (hypotV(u1) < OPEN || hypotV(u2) < OPEN) {
     return { error: "Вырожденное направление смежного элемента" };
   }
 
-  // Reference points one unit back / forward along tangents for the classic formulas
   const startRef = add(corner, scale(u1, -1));
   const endHint = add(corner, u2);
 
   try {
     if (kind === "rounding") {
       const f = filletLines(startRef, corner, endHint, b);
-      // Trim along real path length of each segment
       const Lprev = last.type === "line" ? dist(last.start, last.end) : Math.abs(last.sweep) * last.r;
       const Lnext = first.type === "line" ? dist(first.start, first.end) : Math.abs(first.sweep) * first.r;
 
@@ -699,8 +699,6 @@ function applyTransition(
       let trimUsed: number;
 
       if (f.trim >= Lprev - OPEN || f.trim >= Lnext - OPEN) {
-        // R too large for full tangent length — clamp touch points onto segments
-        // (ported from HTML portable contour solver).
         useClamped = true;
         const trimIdeal = f.trim;
         const T1_ideal = add(corner, scale(u1, -trimIdeal));
@@ -792,7 +790,6 @@ function applyTransition(
       };
     }
 
-    // Chamfer
     const c = chamferLines(startRef, corner, endHint, b);
     const Lprev = last.type === "line" ? dist(last.start, last.end) : Math.abs(last.sweep) * last.r;
     const Lnext = first.type === "line" ? dist(first.start, first.end) : Math.abs(first.sweep) * first.r;
@@ -888,22 +885,7 @@ export function solveContour(elements: ContourElement[], xMode: XMode = "diamete
     ),
   );
 
-  const pending: { id: string; kind: "chamfer" | "rounding"; b: number }[] = [];
   let cursor = start;
-  const deferred: { index: number; el: LineElement; dir: Vec }[] = [];
-
-  const flushDeferred = (hit: Vec) => {
-    if (deferred.length === 0) return;
-    const d = deferred.pop()!;
-    const end = hit;
-    const length = dist(d.dir ? cursor : cursor, end);
-    const segs: Segment[] = [{ type: "line", start: cursor, end, sourceId: d.el.id }];
-    // cursor here is already after previous; we need the start of deferred.
-    // We'll re-solve deferred from its recorded start stored in solved placeholder... 
-    void length;
-    void segs;
-  };
-  void flushDeferred;
 
   for (let i = 0; i < elements.length; i++) {
     const el = elements[i];
@@ -913,8 +895,6 @@ export function solveContour(elements: ContourElement[], xMode: XMode = "diamete
       if (el.b == null || !Number.isFinite(el.b) || el.b <= 0) {
         issues.push({ id: el.id, level: "error", message: el.kind === "chamfer" ? "Задайте размер фаски B" : "Задайте радиус R" });
         solved.push(pack(el, cursor, cursor, [], [], xMode));
-      } else {
-        pending.push({ id: el.id, kind: el.kind, b: el.b });
       }
       continue;
     }
@@ -923,71 +903,7 @@ export function solveContour(elements: ContourElement[], xMode: XMode = "diamete
       if (el.kind === "line") {
         const s = solveLineKnown(cursor, el, xMode);
         if (s.deferred) {
-          const nxt = nextPrimitiveIndex(elements, i + 1);
-          if (nxt < 0) throw new Error("Незамкнутый элемент: нет следующего для пересечения");
-          const nextEl = elements[nxt];
-          const ndir = primitiveDir(nextEl, cursor, xMode);
-          const d1 = s.dir;
-          let d2 = ndir;
-          let p2 = cursor;
-          if (nextEl.kind === "line") {
-            const ns = solveLineKnown(cursor, nextEl, xMode);
-            if (!ns.deferred) {
-              p2 = ns.end;
-              d2 = hypotV(sub(ns.end, cursor)) > OPEN ? norm(sub(ns.end, cursor)) : ns.dir;
-              // Next line with known end but unknown start: treat as line through that end with its direction
-              const nd = lineDirVec(nextEl) ?? d2;
-              const hit = intersectLines(cursor, d1, ns.end, { z: -nd.z, x: -nd.x } );
-              // Better: next line as infinite line through its solved end with its dir.
-              const hit2 = intersectLines(cursor, d1, ns.end, nd);
-              if (!hit2) throw new Error("Прямые параллельны — пересечения нет");
-              if (hit2.t < -OPEN) throw new Error("Пересечение лежит против направления текущего элемента");
-              const end = hit2.p;
-              const formulas = [
-                ...s.formulas,
-                formula("Пересечение", "S + t u1 = P2 + s u2", `t=${hit2.t.toFixed(4)}`),
-                formula("Угол", "A = atan2(uz⊥)", `${s.angleDeg.toFixed(4)}°`),
-              ];
-              const packed = pack(
-                el,
-                cursor,
-                end,
-                [{ type: "line", start: cursor, end, sourceId: el.id }],
-                formulas,
-                xMode,
-                { angleDeg: wrapDeg(s.angleDeg) },
-              );
-              solved.push(packed);
-              cursor = end;
-              void hit;
-              continue;
-            }
-            d2 = ns.dir;
-            p2 = cursor;
-            const hit = intersectLines(cursor, d1, p2, d2);
-            if (!hit) throw new Error("Направления параллельны");
-            // two deferred rays from same point - degenerate
-            throw new Error("Два подряд нерешённых элемента: задайте хотя бы одну координату");
-          }
-          if (nextEl.kind === "undercut" && defined(nextEl.z)) {
-            const hit = intersectLines(cursor, d1, { z: nextEl.z, x: 0 }, { z: 0, x: 1 });
-            if (!hit) throw new Error("Нет пересечения с торцем канавки");
-            const end = hit.p;
-            solved.push(
-              pack(
-                el,
-                cursor,
-                end,
-                [{ type: "line", start: cursor, end, sourceId: el.id }],
-                [...s.formulas, formula("Пересечение с Z канавки", "Z = Zканавки", end.z.toFixed(3))],
-                xMode,
-                { angleDeg: s.angleDeg },
-              ),
-            );
-            cursor = end;
-            continue;
-          }
-          throw new Error("Не удалось замкнуть прямую пересечением");
+          throw new Error("Незамкнутый элемент: нет следующего для пересечения");
         }
         if (s.end.x < -1e-6) {
           issues.push({ id: el.id, level: "warning", message: "Контур пересёк ось (отрицательный радиус)" });
@@ -1029,9 +945,6 @@ export function solveContour(elements: ContourElement[], xMode: XMode = "diamete
     }
   }
 
-  // Apply chamfer/rounding between the primitives they sit among.
-  // pending items were recorded in order as they appeared; pair each with
-  // the solved primitive that followed it.
   const transEls = elements.filter((e) => e.kind === "chamfer" || e.kind === "rounding");
   for (const tEl of transEls) {
     const idx = elements.indexOf(tEl);
@@ -1057,13 +970,11 @@ export function solveContour(elements: ContourElement[], xMode: XMode = "diamete
     const ni = solved.findIndex((s) => s.id === nextS.id);
     solved[pi] = res.prev;
     solved[ni] = res.next;
-    // insert transition after prev in solved list if not already
     const exists = solved.findIndex((s) => s.id === tEl.id);
     if (exists >= 0) solved[exists] = res.trans;
     else solved.splice(pi + 1, 0, res.trans);
   }
 
-  // Жёсткая стыковка сегментов (start следующего = end предыдущего)
   for (let ji = 1; ji < solved.length; ji++) {
     const prevJ = solved[ji - 1];
     const curJ = solved[ji];
