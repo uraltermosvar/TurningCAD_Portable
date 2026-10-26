@@ -1,0 +1,208 @@
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  --font-sans: "IBM Plex Sans", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", "SF Mono", ui-monospace, Menlo, monospace;
+
+  --color-background: #1a120c;
+  --color-foreground: #e8ece9;
+  --color-card: #241a14;
+  --color-card-foreground: #e8ece9;
+  --color-popover: #1a1f24;
+  --color-popover-foreground: #e8ece9;
+  --color-primary: #e8c547;
+  --color-primary-foreground: #1a120c;
+  --color-secondary: #1c2228;
+  --color-secondary-foreground: #d5dcd7;
+  --color-muted: #1c2228;
+  --color-muted-foreground: #8b9390;
+  --color-accent: #24302b;
+  --color-accent-foreground: #ffe566;
+  --color-destructive: #c47070;
+  --color-destructive-foreground: #1a120c;
+  --color-border: #2a3238;
+  --color-input: #2a3238;
+  --color-ring: #e8c547;
+  --color-bezel: #140e0a;
+  --color-steel: #9aa3ad;
+  --color-phosphor: #e8c547;
+  --color-phosphor-hot: #ffe566;
+  --color-axis-z: #7a9ec4;
+  --color-axis-x: #c48a7a;
+  --color-warn: #c4a574;
+  --color-stock: #3a4248;
+
+  --radius-xs: 3px;
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius: 8px;
+
+  --shadow-bezel: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 0 0 1px rgb(0 0 0 / 0.4);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  input,
+  textarea {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.crt-grid {
+  background-image:
+    linear-gradient(rgb(126 184 154 / 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(126 184 154 / 0.04) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.keycap {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    inset 0 -1px 0 rgb(0 0 0 / 0.45),
+    0 1px 0 rgb(0 0 0 / 0.4);
+}
+
+.keycap:active {
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.5);
+  transform: translateY(1px);
+}
+
+.label-func{color:#ffd84a;font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+
+
+
+/* ===== ICP BASE v6: modal labels white + canvas Z btn ===== */
+[role="dialog"] label,
+[role="dialog"] [data-slot="label"],
+[role="dialog"] .text-phosphor,
+[role="dialog"] .text-muted-foreground,
+[role="dialog"] .text-steel,
+[role="dialog"] .text-foreground,
+[data-slot="dialog-content"] label,
+[data-slot="dialog-content"] [data-slot="label"],
+[data-slot="dialog-content"] .text-phosphor,
+[data-slot="dialog-content"] .text-muted-foreground,
+[data-slot="dialog-content"] .text-steel,
+[data-radix-dialog-content] label,
+[class*="DialogContent"] label,
+[class*="DialogContent"] [class*="Label"],
+[class*="DialogContent"] .text-phosphor,
+[class*="DialogContent"] span,
+[role="dialog"] span.uppercase,
+[role="dialog"] .font-mono,
+[role="dialog"] [class*="Label"],
+[role="dialog"] h2,
+[role="dialog"] [data-slot="dialog-title"] {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  opacity: 1 !important;
+}
+[role="dialog"] input,
+[role="dialog"] textarea,
+[role="dialog"] select,
+[data-slot="dialog-content"] input,
+[data-slot="dialog-content"] textarea,
+[data-slot="dialog-content"] select,
+[class*="DialogContent"] input {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffe566 !important;
+}
+[role="dialog"] input::placeholder {
+  color: rgba(255,255,255,0.4) !important;
+}
+.icp-zflip-btn {
+  position: absolute; top: 8px; right: 8px; z-index: 20;
+  min-width: 44px; min-height: 36px; padding: 4px 10px;
+  border-radius: 8px; border: 1.5px solid #e8c547;
+  background: rgba(34,28,22,0.92); color: #ffe566;
+  font-family: ui-monospace, monospace; font-size: 14px; font-weight: 700;
+  cursor: pointer; line-height: 1.1; box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+}
+.icp-zflip-btn span.sub { display:block; font-size:9px; color:#c4b49a; font-weight:600; }
+.icp-zflip-btn:active { background: #3d3428; }
+
+/* ===== ICP BASE v6: modal labels white + canvas Z btn ===== */
+[role="dialog"] label,
+[role="dialog"] [data-slot="label"],
+[role="dialog"] .text-phosphor,
+[role="dialog"] .text-muted-foreground,
+[role="dialog"] .text-steel,
+[role="dialog"] .text-foreground,
+[data-slot="dialog-content"] label,
+[data-slot="dialog-content"] [data-slot="label"],
+[data-slot="dialog-content"] .text-phosphor,
+[data-slot="dialog-content"] .text-muted-foreground,
+[data-slot="dialog-content"] .text-steel,
+[data-radix-dialog-content] label,
+[class*="DialogContent"] label,
+[class*="DialogContent"] [class*="Label"],
+[class*="DialogContent"] .text-phosphor,
+[class*="DialogContent"] span,
+[role="dialog"] span.uppercase,
+[role="dialog"] .font-mono,
+[role="dialog"] [class*="Label"],
+[role="dialog"] h2,
+[role="dialog"] [data-slot="dialog-title"] {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  opacity: 1 !important;
+}
+[role="dialog"] input,
+[role="dialog"] textarea,
+[role="dialog"] select,
+[data-slot="dialog-content"] input,
+[data-slot="dialog-content"] textarea,
+[data-slot="dialog-content"] select,
+[class*="DialogContent"] input {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffe566 !important;
+}
+[role="dialog"] input::placeholder {
+  color: rgba(255,255,255,0.4) !important;
+}
+.icp-zflip-btn {
+  position: absolute; top: 8px; right: 8px; z-index: 20;
+  min-width: 44px; min-height: 36px; padding: 4px 10px;
+  border-radius: 8px; border: 1.5px solid #e8c547;
+  background: rgba(34,28,22,0.92); color: #ffe566;
+  font-family: ui-monospace, monospace; font-size: 14px; font-weight: 700;
+  cursor: pointer; line-height: 1.1; box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+}
+.icp-zflip-btn span.sub { display:block; font-size:9px; color:#c4b49a; font-weight:600; }
+.icp-zflip-btn:active { background: #3d3428; }

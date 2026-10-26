@@ -1,0 +1,19 @@
+ICP Contour Portable PILOT FULL
+================================
+All patches in one archive (no node_modules).
+
+Install (Windows):
+  1. Unzip
+  2. npm install --legacy-peer-deps
+  3. npm run dev
+
+Included:
+  - Arc joint snap, G-code decimal point, print via iframe
+  - Reverse / mirror Z / templates
+  - Post profiles Fanuc/Siemens/Haas, O/WCS/F/S/T
+  - Geometry warnings (self-intersect lines+arcs, sharp corners)
+  - No machine limits, no segment comments
+  - SVG + DXF export
+  - Dimensioned sketch print (All / Region)
+  - SoftKeys full-width bar, buttons right-aligned
+  - .npmrc legacy-peer-deps=true
